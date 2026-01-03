@@ -1,127 +1,243 @@
 # srsRAN-Project-E2E
-Open5GS 5G Core + srsRAN gNB + srsUE
 
-Reference Link: https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html#srsran-gnb-with-srsue
+**End-to-End 5G Setup using Open5GS + srsRAN gNB + srsUE (ZMQ-based Virtual RF)**
 
-## Hardware and Software Overview
-For this application note, the following hardware and software are used:
+This repository documents a complete **end-to-end 5G standalone (SA) setup** using:
 
-- VM with Ubuntu 22.04.1 LTS
-- srsRAN Project -> for srsGNB
-- srsRAN 4G (23.11 or later) --> for srsUE
-- Open5GS 5G Core --> Docker based setup
-- ZeroMQ --> networking library to transfer radio samples between applications( i.e virtual radio)
+* **Open5GS** as the 5G Core (Docker-based)
+* **srsRAN Project** as the 5G gNB
+* **srsRAN 4G (srsUE)** as the UE
+* **ZeroMQ** as a virtual RF interface (no SDR required)
 
-srsRAN deployment
+This setup is intended for **testing, learning, and research**, and runs entirely on a **single Ubuntu VM**.
 
-### Prerequisites
+---
 
+## Reference Documentation
 
-#### Docker
+* srsUE with srsRAN gNB (ZMQ):
+  [https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html](https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html)
+
+---
+
+## Architecture Overview
+
 ```
-sudo apt install -y git net-tools putty
++-----------------------------+
+|        Ubuntu 22.04 VM      |
+|                             |
+|  +----------------------+   |
+|  |  Open5GS 5G Core     |   |
+|  |  (Docker Compose)    |   |
+|  +----------+-----------+   |
+|             | N2 / N3       |
+|  +----------v-----------+   |
+|  |   srsRAN gNB         |   |
+|  |   (ZMQ RF)           |   |
+|  +----------+-----------+   |
+|             | ZMQ           |
+|  +----------v------------+  |
+|  |   srsUE               |  |
+|  |   (Network Namespace) |  |
+|  +-----------------------+  |
++-----------------------------+
+```
 
-# https://docs.docker.com/engine/install/ubuntu/
+---
+
+## Hardware and Software Requirements
+
+### System
+
+* Ubuntu **22.04.1 LTS**
+* Single VM or bare-metal system
+* Internet access
+
+### Software Components
+
+* **Open5GS** (Docker-based 5G Core)
+* **srsRAN Project** (5G gNB)
+* **srsRAN 4G (23.11 or later)** (srsUE)
+* **ZeroMQ** (virtual RF transport)
+
+---
+
+## Prerequisites
+
+### System Packages
+
+```bash
 sudo apt update
+sudo apt install -y git net-tools build-essential cmake \
+                   libfftw3-dev libmbedtls-dev \
+                   libboost-program-options-dev \
+                   libconfig++-dev libsctp-dev \
+                   libyaml-cpp-dev libgtest-dev \
+                   libzmq3-dev
+```
+
+---
+
+### Docker Installation (for Open5GS)
+
+```bash
 sudo apt install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+echo "deb [arch=$(dpkg --print-architecture) \
+signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu \
+$(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Add your username to the docker group, otherwise you will have to run in sudo mode.
-sudo usermod -a -G docker $(whoami)
+sudo apt install -y docker-ce docker-ce-cli \
+                   containerd.io docker-buildx-plugin \
+                   docker-compose-plugin
 ```
 
-#### ZeroMQ Installation
-sudo apt-get install libzmq3-dev
+Add your user to the Docker group:
 
-#### srsRAN 4G prerequiisites
-
-```
-sudo apt-get install build-essential cmake libfftw3-dev libmbedtls-dev libboost-program-options-dev libconfig++-dev libsctp-dev 
+```bash
+sudo usermod -aG docker $(whoami)
+newgrp docker
 ```
 
-#### srsRAN Project prerequiaites
+---
 
-```
-sudo apt-get install cmake make gcc g++ pkg-config libfftw3-dev libmbedtls-dev libsctp-dev libyaml-cpp-dev libgtest-dev
-```
+## Build srsRAN 4G (for srsUE)
 
---------------------
-
-
-# srsRAN 4G ( for srsUE)
-
-```
+```bash
 cd ~
 git clone https://github.com/srsRAN/srsRAN_4G.git
 cd srsRAN_4G
-mkdir build
-cd build
+mkdir build && cd build
+
 cmake ../ -DENABLE_EXPORT=ON -DENABLE_ZEROMQ=ON
-make -j `nproc`
-make test # optional
+make -j$(nproc)
+make test   # optional
 ```
 
-# srsRAN project (for 5G RAN)
+---
 
-```
+## Build srsRAN Project (for 5G gNB)
+
+```bash
 cd ~
 git clone https://github.com/srsran/srsRAN_Project.git
 cd srsRAN_Project
-mkdir build
-cd build
+mkdir build && cd build
+
 cmake ../ -DENABLE_EXPORT=ON -DENABLE_ZEROMQ=ON
-make -j `nproc`
+make -j$(nproc)
 ```
 
-# open5gs 5gc on docker
+---
 
+## Deploy Open5GS 5G Core (Docker)
 
+```bash
 cd ~/srsRAN_Project/docker
 docker compose up --build 5gc -d
+```
 
+Verify containers:
 
-# run gnb 
+```bash
+docker ps
+```
 
-If you have built srsRAN Project from source and have not installed it, then you can run the gNB from: /srsRAN_Project/build/apps/gnb. In this folder you will find the gNB application binary.
+---
 
+## Configuration Files (ZMQ)
 
-cd ~/srsRAN_Project/build/apps/gnb
-sudo ./gnb -c  ~/gnb_zmq.yaml
+Download reference configuration files:
 
+```bash
+cd ~
 wget https://docs.srsran.com/projects/project/en/latest/_downloads/a7c34dbfee2b765503a81edd2f02ec22/gnb_zmq.yaml
 wget https://docs.srsran.com/projects/project/en/latest/_downloads/fbb79b4ff222d1829649143ca4cf1446/ue_zmq.conf
+```
 
+---
 
-# run srsUe
+## Run srsRAN gNB
 
+```bash
+cd ~/srsRAN_Project/build/apps/gnb
+sudo ./gnb -c ~/gnb_zmq.yaml
+```
+
+Ensure the gNB successfully:
+
+* Connects to AMF
+* Starts NGAP and GTP-U
+
+---
+
+## Run srsUE (with Network Namespace)
+
+Create UE network namespace:
+
+```bash
 sudo ip netns add ue1
-sudo ip netns list
+ip netns list
+```
 
+Run srsUE:
 
+```bash
 cd ~/srsRAN_4G/build/srsue/src
-sudo ./srsue ~/ue_zmq.conf 
 
+sudo ./srsue ~/ue_zmq.conf
+```
 
-sudo ./srsue/src/srsue --rf.device_name=zmq --rf.device_args="tx_port=tcp://*:2001,rx_port=tcp://localhost:2000,id=ue,base_srate=23.04e6" --gw.netns=ue1
+Or explicitly via ZMQ arguments:
 
-# ping test
+```bash
+sudo ./srsue \
+  --rf.device_name=zmq \
+  --rf.device_args="tx_port=tcp://*:2001,rx_port=tcp://localhost:2000,id=ue,base_srate=23.04e6" \
+  --gw.netns=ue1
+```
 
-reference: https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html#testing-the-network
+---
 
+## Routing Configuration
 
-ip ro add 10.45.0.0/16 via 10.53.1.2
-ip r
-ip netns exec ue1 ip route add default via 10.45.1.1 dev tun_srsue
-ip netns exec ue1 ip r
+### Host Routing (Downlink)
 
-Uplink:
-ping 10.45.1.1
-Downlink:
+```bash
+sudo ip route add 10.45.0.0/16 via 10.53.1.2
+ip route
+```
+
+### UE Namespace Routing
+
+```bash
+sudo ip netns exec ue1 ip route add default via 10.45.1.1 dev tun_srsue
+sudo ip netns exec ue1 ip route
+```
+
+---
+
+## Connectivity Test
+
+### Uplink Test (UE → Core)
+
+```bash
+sudo ip netns exec ue1 ping 10.45.1.1
+```
+
+### Downlink Test (Core → UE)
+
+```bash
 ping 10.45.1.2
+```
 
+Successful ping confirms **end-to-end user plane connectivity**.
 
+---
