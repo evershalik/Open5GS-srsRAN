@@ -148,6 +148,7 @@ Verify containers:
 
 ```bash
 docker ps
+docker logs -f open5gs_5gc
 ```
 
 ---
@@ -241,3 +242,7 @@ ping 10.45.1.2
 Successful ping confirms **end-to-end user plane connectivity**.
 
 ---
+
+
+## Tutorial Video 
+[Open5GS srsRAN E2E Deployment Tutorial](https://youtu.be/dn2V1daWnXY?si=w_aZmGpyUHKQHxEV)
